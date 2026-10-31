@@ -2,12 +2,15 @@ package com.ronald.rest.client.aspect;
 
 import io.github.bucket4j.BlockingBucket;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.ConsumptionProbe;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,7 +33,21 @@ class ClientRateLimitAspectTest {
     private ProceedingJoinPoint joinPoint;
 
     @Test
-    void consumesATokenBeforeProceedingWithTheCall() throws Throwable {
+    void proceedsImmediatelyWhenATokenIsAvailable() throws Throwable {
+        when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(ConsumptionProbe.consumed(4, 0));
+        when(joinPoint.proceed()).thenReturn("result");
+
+        Object result = new ClientRateLimitAspect(bucket).throttle(joinPoint);
+
+        assertThat(result).isEqualTo("result");
+        verify(joinPoint).proceed();
+        verify(bucket, never()).asBlocking();
+    }
+
+    @Test
+    void blocksForTheRefillWindowWhenRateLimitIsExceeded() throws Throwable {
+        long nanosToWait = Duration.ofMillis(500).toNanos();
+        when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(ConsumptionProbe.rejected(0, nanosToWait, nanosToWait));
         when(bucket.asBlocking()).thenReturn(blockingBucket);
         when(joinPoint.proceed()).thenReturn("result");
 
@@ -44,6 +61,8 @@ class ClientRateLimitAspectTest {
 
     @Test
     void doesNotProceedWhenBlockedWaitForATokenIsInterrupted() throws Throwable {
+        long nanosToWait = Duration.ofMillis(500).toNanos();
+        when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(ConsumptionProbe.rejected(0, nanosToWait, nanosToWait));
         when(bucket.asBlocking()).thenReturn(blockingBucket);
         doThrow(new InterruptedException("interrupted while waiting for refill")).when(blockingBucket).consume(1);
 
