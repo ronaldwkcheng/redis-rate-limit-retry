@@ -1,9 +1,23 @@
 spring:
   application:
     name: redis-rate-limit-retry
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 server:
   port: 8080
 
 jsonplaceholder:
   base-url: https://jsonplaceholder.typicode.com
+
+client:
+  retry:
+    max-attempts: 3
+    initial-delay-ms: 500
+    multiplier: 2.0
+  rate-limiter:
+    capacity: 5
+    refill-tokens: 5
+    refill-duration-seconds: 1
