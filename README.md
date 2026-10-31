@@ -17,11 +17,12 @@ A Spring Boot sample that calls the [JSONPlaceholder](https://jsonplaceholder.ty
 ## Prerequisites
 
 - JDK 25
-- A local Redis instance on port `6379`. With Docker:
+- To run the app: a local Redis instance on port `6379`. With Docker:
 
   ```bash
   docker run -d --name redis -p 6379:6379 redis:latest
   ```
+- To run the tests: Docker must be available (the rate-limit integration test spins up a disposable Redis container via Testcontainers; it doesn't use the Redis instance above).
 
 ## Running the app
 
@@ -77,8 +78,12 @@ client:
 ./gradlew test
 ```
 
-Requires the local Redis instance described above (the integration tests use it directly; there is no embedded/Testcontainers Redis).
+**Requires Docker.** `UserClientRateLimitTest` uses [Testcontainers](https://testcontainers.com) to start a disposable Redis container per run, so the test is isolated from any Redis you have running locally and from other test runs.
 
 - `UserClientRetryTest` — stubs a local HTTP server returning `502, 502, 200` and asserts `UserClient` retries with backoff until it succeeds.
-- `UserClientRateLimitTest` — boots the full context against real Redis with a 1 token/sec bucket and asserts a call that exceeds the limit blocks for the refill window before proceeding.
+- `UserClientRateLimitTest` — boots the full context against a Testcontainers-managed Redis with a 1 token/sec bucket and asserts a call that exceeds the limit blocks for the refill window before proceeding.
 - `ClientRateLimitAspectTest` — a pure unit test (mocked `Bucket`/`BlockingBucket`/`ProceedingJoinPoint`) verifying the aspect consumes a token before proceeding and never proceeds if the blocking wait is interrupted.
+
+### Note for recent Docker Desktop versions (Engine 29+)
+
+Docker Desktop versions built against Engine 29+ raised the minimum supported Docker API version to `1.44`, which breaks older Testcontainers/docker-java clients that default to a much older version — surfacing as `Could not find a valid Docker environment` even though Docker is running fine ([testcontainers-java#11212](https://github.com/testcontainers/testcontainers-java/issues/11212)). This repo already works around it via `src/test/resources/docker-java.properties` (`api.version=1.44`), so no action should be needed; if you still see that error, check your Docker Desktop version and that this file is on the test classpath.
