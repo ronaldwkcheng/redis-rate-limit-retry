@@ -21,3 +21,4 @@ client:
     capacity: 5
     refill-tokens: 5
     refill-duration-seconds: 1
+    max-wait-ms: 2000
